@@ -1,0 +1,175 @@
+! Author: Antonio Medrano
+! Date: 3/14/2018
+
+model sudoku
+uses "mmxprs"   !gain access to the Xpress-Optimizer solver
+uses "mmsystem" !gain access to the gettime function
+
+!optional parameters section
+stime:=gettime
+
+!sample declarations section
+declarations
+	! range along a single dimension of sudoku
+	mRange: range
+
+	! the decision variables for sudoku values
+	! we see the sudoku challenge as a cube where 2 dimensions are positions
+	! the third dimension is the value , with 1 in the value cell and 0 otherwise
+	x: array(mRange, mRange, mRange) of mpvar
+
+	! the starting solution you are given
+	starting_grid: array(mRange, mRange) of integer
+
+	! the objective
+	obj:linctr
+end-declarations
+
+!(! 9x9 Sudoku problem
+m := 9
+mRange:= 1..m
+finalize(mRange)
+starting_grid:: [8,0,0,0,0,0,0,0,0,
+   				 0,0,3,6,0,0,0,0,0,
+   				 0,7,0,0,9,0,2,0,0,
+   				 0,5,0,0,0,7,0,0,0,
+   				 0,0,0,0,4,5,7,0,0,
+   				 0,0,0,1,0,0,0,3,0,
+   				 0,0,1,0,0,0,0,6,8,
+   				 0,0,8,5,0,0,0,1,0,
+   				 0,9,0,0,0,0,4,0,0]
+!)
+
+(! 4x4 sudoku problem
+m := 4
+mRange:= 1..m
+finalize(mRange)
+starting_grid:: [0, 0, 4, 0,
+				 4, 0, 3, 0,
+				 0, 4, 0, 3,
+				 0, 1, 0, 0]
+!)
+
+(! 16x16 Sudoku problem
+m := 16
+mRange:= 1..m
+finalize(mRange)
+starting_grid:: [ 0, 0,12, 0, 0, 2, 0, 0, 0, 7, 3, 0,13,15, 0, 0,
+    15, 0, 0, 0, 0, 3, 0, 0, 9, 0, 0, 0,12, 0, 0,10,
+     0, 0, 0, 0, 9, 0, 6, 0, 0, 0,12, 0, 0, 0, 2, 5,
+     6,11, 1, 0, 0,10, 5, 0, 0, 2, 0,15, 0, 0, 0, 0,
+     4, 6, 3, 0, 0, 0,13,14, 0, 0, 0, 0, 0, 7, 0, 0,
+     0,15,11, 0, 7, 0, 9, 0, 0, 0, 0, 0, 0, 0, 1, 0,
+     0, 1, 0,10,15, 0, 0, 0,11, 3,14, 0, 6, 0, 0, 0,
+    13, 0, 8, 7, 0, 5, 0, 0, 0, 1, 9,12, 0, 0, 0, 0,
+     0, 0, 0, 6, 3, 7,15, 4, 0, 0, 0, 0, 0,14, 0, 0,
+     0, 8, 0, 0, 0, 0, 0, 0, 0,11, 7, 0, 4, 0, 0, 0,
+     0, 0, 0, 0, 0, 0, 0, 0,13, 0, 0, 6, 9, 0, 3, 0,
+     0, 0, 0, 0, 2, 8,14, 0, 3, 0, 0,10, 0, 0,13, 7,
+     0, 0, 0, 8, 0, 0, 0, 7,10, 0, 0, 0, 0, 0, 5, 1,
+     0, 4,10, 1, 6, 0, 0, 0, 0,12, 0,14, 7, 3, 9,15,
+     3, 0,15, 0, 0, 0, 0, 8, 0, 0, 1, 0,14,12, 0, 0,
+     2, 0, 0, 9,12, 0, 0, 1, 0, 0, 0, 0, 0, 6, 8, 0]
+!)
+
+
+! the square root of the size, for defining sub-boxes
+n := round(sqrt(m))
+
+! a placeholder objective
+obj := 0
+
+! assign variables for numbers we are given on the board
+forall(i,j in 1..m) do
+	if starting_grid(i,j) > 0 then
+		x(i,j,starting_grid(i,j)) = 1
+	end-if
+end-do
+
+! define the constraints
+! each stack of k cells at holding the value the ij cell
+! of the matrix
+! can have 1 in just one cell and 0 otherwise
+forall (i,j in 1..m) do
+	sum ( k in 1..m ) x(i,j,k) = 1
+end-do
+
+! each row must have all of 1..9 with no repeat
+forall (i,k in 1..m) do
+	sum ( j in 1..m ) x(i,j,k) = 1
+end-do
+
+! each column of the matrix must have all of 1..9 with
+! no repeat
+forall (j,k in 1..m) do
+	sum ( i in 1..m ) x(i,j,k) = 1
+end-do
+
+! each of the m nxn sub matrices should have all of 1..m
+!  with no repeat
+forall (Ci, Cj in 1..n) do
+	forall (k in 1..m) do
+		sum (i,j in 1..n ) x(Ci*n-n+i,Cj*n-n+j,k) = 1
+	end-do
+end-do
+
+! the variables can be 0 or 1
+forall (i,j,k in 1..m) do
+	x(i,j,k) is_binary
+end-do
+
+! Uncomment the following line to see the Optimizer log
+! setparam("XPRS_VERBOSE",true)
+
+writeln("Begin running model")
+minimize(obj)
+writeln("End running model")
+
+stime:=gettime-stime
+writeln("Problem solved in ",stime," seconds")
+
+writeln("\nSudoku Solution")
+writeln("---------------\n")
+
+! string format spacing must be larger for
+! problems that are larger than 9x9
+t := 2
+if (m > 9) then
+	t := 3
+end-if
+
+! Print the Sudoku table
+forall ( i in 1..m) do
+	if (i = 1) then
+		forall(r in 1..m*2+2*n+1+(t-2)*m)
+			write("-")
+		writeln("")
+	end-if
+	forall ( j in 1..m) do
+		if (j = 1) then
+			write("|")
+		end-if
+		forall ( k in 1..m ) do
+			if (getsol(x(i,j,k)) = 1) then
+				write(strfmt(k,t))
+			end-if
+		end-do
+		if (j mod n = 0) then
+			write(" |")
+		end-if
+	end-do
+	writeln("")
+	if (i mod n = 0) then
+		forall(r in 1..m*2+2*n+1+(t-2)*m)
+			write("-")
+		writeln("")
+	end-if
+end-do
+end-model
+
+
+
+
+
+
+
